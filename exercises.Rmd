@@ -1,0 +1,432 @@
+---
+title: "Shiny exercises"
+author: "Jonathan Neimann"
+date: "2024-11-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(shiny)
+```
+
+Problem 1.1
+```{r}
+library(shiny)
+ui <- fluidPage(
+  textInput("name", "What's your name?"), # Input field for the user's name
+  textOutput("greeting")                 # Output area to display the greeting
+)
+
+
+server <- function(input, output) {
+  output$greeting <- renderText({       
+    paste0("Hello ", input$name)
+  })
+}
+
+# Run the application
+shinyApp(ui = ui, server = server)
+```
+
+Problem 1.2
+```{r}
+ui <- fluidPage(
+  sliderInput("x", label = "If x is", min = 1, max = 50, value = 30),
+  "then x times 5 is",
+  textOutput("product")
+)
+
+server <- function(input, output, session) {
+  output$product <- renderText({ 
+    input$x * 5 #did not define input in server logic
+  })
+}
+
+shinyApp(ui, server)
+```
+Problem 1.3
+```{r}
+ui <- fluidPage(
+  sliderInput("x", label = "If x is", min = 1, max = 50, value = 30),  
+  sliderInput("y", label = "and y is", min = 1, max = 50, value = 5),   #slider for y
+  "then, x times y is",
+  textOutput("product")                                                 
+)
+
+server <- function(input, output, session) {
+  output$product <- renderText({ 
+    input$x * input$y
+  })
+}
+
+shinyApp(ui, server)
+```
+Problem 1.4 
+
+Can use a reactive expression to hold the value of input$x * input$y
+```{r}
+ui <- fluidPage(
+  sliderInput("x", "If x is", min = 1, max = 50, value = 30),
+  sliderInput("y", "and y is", min = 1, max = 50, value = 5),
+  "then, (x * y) is", textOutput("product"),
+  "and, (x * y) + 5 is", textOutput("product_plus5"),
+  "and, (x * y) + 10 is", textOutput("product_plus10")
+)
+
+server <- function(input, output, session) {
+  product <- reactive({ 
+    input$x * input$y  # Centralized calculation
+  })
+  
+  output$product <- renderText({ 
+    product()  # Use the reactive value
+  })
+  
+  output$product_plus5 <- renderText({ 
+    product() + 5  # Add 5 to the reactive value
+  })
+  
+  output$product_plus10 <- renderText({ 
+    product() + 10  # Add 10 to the reactive value
+  })
+}
+
+shinyApp(ui, server)
+```
+Problem 1.5
+
+```{r}
+library(ggplot2)
+
+datasets <- c("economics", "faithfuld", "seals")
+ui <- fluidPage(
+  selectInput("dataset", "Dataset", choices = datasets),
+  verbatimTextOutput("summary"),
+  plotOutput("plot") # Bug 1 fixed: changed tableOutput to plotOutput
+)
+
+server <- function(input, output, session) {
+  dataset <- reactive({
+    get(input$dataset, "package:ggplot2")
+  })
+  
+  output$summary <- renderPrint({
+    summary(dataset())
+  })
+  
+  output$plot <- renderPlot({
+    data <- dataset()
+    
+    # Bug 2 & 3 fixed: Properly accessing reactive value and creating ggplot
+    if (input$dataset == "economics") {
+      ggplot(data, aes(x = date, y = unemploy)) +
+        geom_line() +
+        labs(title = "Unemployment over Time",
+             x = "Date",
+             y = "Unemployment")
+    } else if (input$dataset == "faithfuld") {
+      ggplot(data, aes(x = waiting, y = eruptions, fill = density)) +
+        geom_tile() +
+        scale_fill_viridis_c() +
+        labs(title = "Old Faithful Eruption Patterns",
+             x = "Waiting Time (minutes)",
+             y = "Eruption Time (minutes)")
+    } else if (input$dataset == "seals") {
+      ggplot(data, aes(x = long, y = lat)) +
+        geom_point(alpha = 0.1) +
+        labs(title = "Seal Locations",
+             x = "Longitude",
+             y = "Latitude")
+    }
+  }, res = 96)
+}
+
+shinyApp(ui, server)
+
+
+```
+
+
+Create a slider input to select values between 0 and 100 where the interval between each selectable value on the slider is 5. Then, add animation to the input widget so when the user presses play the input widget scrolls through the range automatically.
+
+```{r}
+library(shiny)
+
+ui <- fluidPage(
+  # Title
+  titlePanel("Animated Slider Example"),
+  
+  # Create the slider input
+  sliderInput("slider", "Select Value:", min = 0, max = 100, value = 0, step = 5),
+  
+  # Create a Play button to trigger animation
+  actionButton("play", "Play Animation"),
+  
+  # Display the selected slider value
+  textOutput("slider_value")
+)
+
+server <- function(input, output, session) {
+  # Reactive values to store animation status and the current value
+  animation_running <- reactiveVal(FALSE)
+  current_value <- reactiveVal(0)
+  
+  # Output the current slider value
+  output$slider_value <- renderText({
+    paste("Current Value: ", input$slider)
+  })
+  
+  # When the play button is clicked, start the animation
+  observeEvent(input$play, {
+    # Start the animation if it's not already running
+    if (!animation_running()) {
+      animation_running(TRUE)
+      # Run the animation every 200 ms
+      for (i in seq(0, 100, by = 5)) {
+        invalidateLater(200, session)
+        updateSliderInput(session, "slider", value = i)
+      }
+      # Stop the animation after it finishes
+      animation_running(FALSE)
+    }
+  })
+}
+
+shinyApp(ui = ui, server = server)
+```
+
+Re-create the Shiny app from Section 2.3.3, this time setting height to 300px and width to 700px. Set the plot “alt” text so that a visually impaired user can tell that its a scatterplot of five random numbers.
+
+
+
+```{r}
+ui <- fluidPage(
+  # Plot Output with description for accessibility
+  tags$div(
+    # Description for accessibility
+    tags$span("A scatterplot of five random numbers on the x-axis (1 to 5), with corresponding values on the y-axis.", 
+              style = "font-weight: bold; font-size: 14px;"),
+    plotOutput("plot", width = "700px", height = "300px")
+  )
+)
+
+server <- function(input, output, session) {
+  output$plot <- renderPlot({
+    # Scatterplot of five random numbers
+    plot(1:5, y = runif(5), main = "Scatterplot of Random Numbers", 
+         xlab = "Index", ylab = "Random Value", pch = 16)
+  }, res = 96)
+}
+
+shinyApp(ui = ui, server = server)
+
+```
+
+Update the options in the call to renderDataTable() below so that the data is displayed, but all other controls are suppressed (i.e., remove the search, ordering, and filtering commands). You’ll need to read ?renderDataTable and review the options at https://datatables.net/reference/option/.
+
+```{r}
+library(DT)
+
+ui <- fluidPage(
+  DTOutput("table")  # Use DTOutput() instead of dataTableOutput()
+)
+
+server <- function(input, output, session) {
+  output$table <- renderDT({
+    mtcars
+  }, options = list(
+    pageLength = 5,
+    searching = FALSE,   # Disable the search box
+    ordering = FALSE,    # Disable column ordering
+    lengthChange = FALSE, # Disable changing the number of rows per page
+    filtering = FALSE    # Disable filtering controls
+  ))
+}
+
+shinyApp(ui = ui, server = server)
+```
+
+Problem 3.1
+
+```{r}
+ui <- fluidPage(
+  textInput("name", "What's your name?"),
+  textOutput("greeting")
+)
+
+# Server function with the fixed logic (choose one of the corrected versions)
+server <- function(input, output, session) {
+  output$greeting <- renderText({
+    paste0("Hello ", input$name)
+  })
+}
+
+shinyApp(ui = ui, server = server)
+```
+
+Draw the reactive graph for the following server functions:
+
+```{r}
+server1 <- function(input, output, session) {
+  c <- reactive(input$a + input$b)           # c depends on input$a and input$b
+  e <- reactive(c() + input$d)               # e depends on c() and input$d
+  output$f <- renderText(e())                # output$f depends on e()
+}
+
+server2 <- function(input, output, session) {
+  x <- reactive(input$x1 + input$x2 + input$x3)  # x depends on input$x1, input$x2, input$x3
+  y <- reactive(input$y1 + input$y2)              # y depends on input$y1 and input$y2
+  output$z <- renderText(x() / y())               # output$z depends on x() and y()
+}
+
+server3 <- function(input, output, session) {
+  d <- reactive(c() ^ input$d)       # d depends on c() and input$d
+  a <- reactive(input$a * 10)         # a depends on input$a
+  c <- reactive(b() / input$c)       # c depends on b() and input$c
+  b <- reactive(a() + input$b)       # b depends on a() and input$b
+}
+```
+
+Chapter 4
+
+```{r}
+dir.create("neiss")
+#> Warning in dir.create("neiss"): 'neiss' already exists
+download <- function(name) {
+  url <- "https://raw.github.com/hadley/mastering-shiny/main/neiss/"
+  download.file(paste0(url, name), paste0("neiss/", name), quiet = TRUE)
+}
+download("injuries.tsv.gz")
+download("population.tsv")
+download("products.tsv")
+```
+
+```{r}
+injuries <- vroom::vroom("neiss/injuries.tsv.gz")
+
+```
+
+Problem 4.3
+
+```{r}
+
+ui <- fluidPage(
+  titlePanel("Injury Data Summary"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("prod_code", "Select Product Code:", choices = unique(injuries$product_code)),
+      numericInput("num_rows", "Number of Rows to Show:", value = 10, min = 1, step = 1)
+    ),
+    
+    mainPanel(
+      tableOutput("diag"),
+      tableOutput("body_part"),
+      tableOutput("location"),
+      plotOutput("age_sex")
+    )
+  )
+)
+server <- function(input, output, session) {
+  
+  # Reactive expression for filtered data based on selected product code
+  selected <- reactive({
+    filter(injuries, product_code == input$prod_code)
+  })
+  
+  # Reactive expression for summary statistics, grouped by age and sex
+  summary_data <- reactive({
+    selected_data <- selected()
+    summary_table <- selected_data %>%
+      group_by(age, sex) %>%
+      summarise(injury_count = n(), .groups = "drop") %>%
+      mutate(injury_rate = injury_count / sum(injury_count) * 100)
+    summary_table
+  })
+  
+  # Display diagnostic counts table, limited by number of rows input
+  output$diag <- renderTable({
+    head(summary_data() %>% select(diagnosis, injury_count), input$num_rows)
+  })
+  
+  # Display body part counts table, limited by number of rows input
+  output$body_part <- renderTable({
+    head(summary_data() %>% select(body_part, injury_count), input$num_rows)
+  })
+  
+  # Display location counts table, limited by number of rows input
+  output$location <- renderTable({
+    head(summary_data() %>% select(location, injury_count), input$num_rows)
+  })
+  
+  # Plot injury summary by age and sex
+  output$age_sex <- renderPlot({
+    ggplot(summary_data(), aes(x = age, y = injury_count, color = sex)) +
+      geom_bar(stat = "identity") +
+      labs(title = "Injury Summary by Age and Sex", x = "Age Group", y = "Injury Count")
+  })
+}
+
+shinyApp(ui = ui, server = server)
+```
+4.4
+
+```{r}
+ui <- fluidPage(
+  titlePanel("Narrative Viewer"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      actionButton("prev_btn", "Previous Narrative"),
+      actionButton("next_btn", "Next Narrative")
+    ),
+    
+    mainPanel(
+      textOutput("narrative_text")
+    )
+  )
+)
+
+server <- function(input, output, session) {
+  
+  # Sample dataset of narratives
+  narratives <- reactive({
+    c(
+      "Narrative 1: The quick brown fox jumps over the lazy dog.",
+      "Narrative 2: A journey of a thousand miles begins with a single step.",
+      "Narrative 3: To be or not to be, that is the question.",
+      "Narrative 4: The only thing we have to fear is fear itself."
+    )
+  })
+  
+  # Reactive value to store the current index of the narrative
+  current_index <- reactiveVal(1)
+  
+  # Display the current narrative
+  output$narrative_text <- renderText({
+    narratives()[current_index()]
+  })
+  
+  # When 'Next' button is clicked, go to the next narrative
+  observeEvent(input$next_btn, {
+    # Increment the index, loop back to the first narrative if at the end
+    new_index <- current_index() + 1
+    if (new_index > length(narratives())) {
+      new_index <- 1
+    }
+    current_index(new_index)
+  })
+  
+  # When 'Previous' button is clicked, go to the previous narrative
+  observeEvent(input$prev_btn, {
+    # Decrement the index, loop back to the last narrative if at the beginning
+    new_index <- current_index() - 1
+    if (new_index < 1) {
+      new_index <- length(narratives())
+    }
+    current_index(new_index)
+  })
+}
+```
+
